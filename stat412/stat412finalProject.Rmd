@@ -1,0 +1,1174 @@
+---
+title: "stat412 final project"
+author: "Batuhan SAYLAM"
+date: "2024-06-08"
+output: pdf_document
+---
+
+```{r setup,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE,message = FALSE, fig.width=4, fig.height=4)
+```
+
+
+
+```{r}
+library(mice)
+library(VIM)
+library(corrplot)
+library(dplyr)
+library(Hmisc)
+library("stringr")
+library(ggplot2)
+library(gridExtra)
+library(fastDummies)
+library(MASS)
+library(factoextra)
+library(caret)
+library(e1071)
+library(pROC)
+library(rcompanion)
+library(rpart)
+library(rpart.plot)
+library(xgboost)
+library(neuralnet)
+library(reshape2)
+
+```
+
+
+
+```{r}
+data=read.csv("C:/Users/ASUS/Desktop/stat412/Car details v3.csv",na=c(""," "))
+```
+
+
+```{r out.height=4,out.width=4}
+head(data)
+```
+
+
+```{r}
+summary(data)
+```
+
+
+```{r}
+str(data)
+```
+
+
+```{r}
+data[duplicated(data),]
+```
+
+
+```{r}
+data = data[!duplicated(data),]
+data = data[, -which(names(data) == "torque")]
+data = data[, -which(names(data) == "seats")]
+
+```
+
+
+
+
+```{r}
+str(data)
+
+```
+
+
+```{r}
+colnames(data)[c(3,4,6,11)]=c("sellPrice","kmDriven","sellType","maxPower")
+colnames(data)
+```
+
+
+```{r}
+data["mileage"]=str_remove(data$mileage," kmpl")
+data["mileage"]=str_remove(data$mileage," km/kg")
+data["mileage"]=as.numeric(data$mileage)
+
+
+
+data["engine"]=str_remove(data$engine," CC")
+data["engine"]=as.numeric(data$engine)
+
+
+
+data["maxPower"]=str_remove(data$maxPower," bhp")
+data["maxPower"]=as.numeric(data$maxPower)
+```
+
+
+
+```{r}
+table(data$fuel)
+```
+
+
+
+
+```{r}
+table(data$sellType)
+```
+
+
+
+
+```{r}
+table(data$transmission)
+
+```
+
+
+
+```{r}
+table(data$owner)
+```
+
+```{r}
+data$fuel=as.factor(data$fuel)
+data$sellType=as.factor(data$sellType)
+data$transmission=as.factor(data$transmission)
+data$owner=as.factor(data$owner)
+data$year=as.factor(data$year)
+
+str(data)
+```
+
+
+
+
+```{r}
+summary(data)
+
+```
+
+
+
+
+
+
+```{r}
+numeric_data <- data %>% select_if(is.numeric)
+```
+
+```{r}
+sapply(numeric_data, sd, na.rm = TRUE)
+
+```
+
+```{r}
+plot_list <- list()
+
+# Loop through columns and create boxplots
+for (col in colnames(data)) {
+  if(is.numeric(data[[col]])){
+    plot_list[[col]] <- ggplot(data, aes_string(x = col)) +
+        geom_boxplot() +
+        labs(title = paste("Boxplot of", col))+theme_classic()}
+}
+
+# Plotting
+grid.arrange(grobs = plot_list,ncol = 3)
+```
+
+
+
+
+
+```{r}
+priceBoxPlot <- boxplot(data$sellPrice,plot = FALSE)
+length(priceBoxPlot$out)/length(data$sellPrice)
+```
+
+
+
+
+```{r}
+outliers <- priceBoxPlot$out
+data$sellPrice[data$sellPrice %in% unique(outliers)] <- NA
+data$sellPrice[is.na(data$sellPrice)] <- round(mean(data$sellPrice, na.rm = TRUE))
+```
+
+
+
+```{r}
+kmDrivenBoxPlot <- boxplot(data$kmDriven,plot = FALSE)
+length(kmDrivenBoxPlot$out)/length(data$kmDriven)
+```
+
+
+
+```{r}
+outliers <- kmDrivenBoxPlot$out
+data$kmDriven[data$kmDriven %in% unique(outliers)] <- NA
+data$kmDriven[is.na(data$kmDriven)] <- round(mean(data$kmDriven, na.rm = TRUE))
+```
+
+
+
+
+```{r}
+mileageBoxPlot <- boxplot(data$mileage,plot = FALSE)
+length(mileageBoxPlot$out)/length(data$mileage)
+```
+
+```{r}
+outliers <- mileageBoxPlot$out
+data$mileage[data$mileage %in% unique(outliers)] <- NA
+data$mileage[is.na(data$mileage)] <- round(mean(data$mileage, na.rm = TRUE))
+```
+
+
+```{r}
+engineBoxPlot <- boxplot(data$engine,plot = FALSE)
+length(engineBoxPlot$out)/length(data$engine)
+```
+
+
+
+```{r}
+maxPowerBoxPlot <- boxplot(data$maxPower,plot = FALSE)
+length(maxPowerBoxPlot$out)/length(data$maxPower)
+```
+
+
+
+
+```{r}
+outliers <- maxPowerBoxPlot$out
+data$maxPower[data$maxPower %in% unique(outliers)] <- NA
+data$maxPower[is.na(data$maxPower)] <- round(mean(data$maxPower, na.rm = TRUE))
+```
+
+
+
+
+
+
+```{r}
+numeric_data <- data %>% select_if(is.numeric)
+```
+
+
+**EXPLORATORY DATA ANALYSIS**\
+
+**RQ1) Is the distributions of the numeric variables?**
+\
+
+
+```{r}
+par(mfrow=c(3,2))
+for(i in 1:min(ncol(numeric_data))){
+  hist(numeric_data[,i], main=paste("Histogram of",colnames(numeric_data)[i]), xlab="Values") 
+  
+}
+```
+
+
+
+
+**RQ2) Is the  mileage distrubited normally?**
+\
+
+```{r}
+par(bg = "#F8F8FF")
+hist(data$mileage,main="Histogram of the mileage",xlab="Mileage",col="#00ffff",prob=TRUE,breaks="Scott")
+lines(density(data$mileage,na.rm=TRUE),col="red",type="l",lwd=3)
+
+```
+
+
+```{r}
+qqnorm(data$mileage, main = "Q-Q Plot of Mileage")  # Create the Q-Q plot
+qqline(data$mileage, col = 2)  
+```
+
+**RQ3) In different sales types, does  tranmission type have an impact on sales prices? ?**\
+
+```{r}
+ggplot(data=data, aes(x=transmission, y=sellPrice, fill = sellType)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  labs(x = "transmission", y = "Sell Price") +
+  theme_classic()
+```
+
+
+**RQ4) Is there a statistically significant correlation among numeric  variables?** \
+
+
+```{r}
+corrplot(cor(numeric_data, use = "complete.obs"), method = "number", type = "upper", tl.col = "black", tl.srt = 45) 
+```
+
+
+**RQ5) How is transmission type distributed  according to sell type?**\
+```{r}
+spineplot(data$transmission,data$sellType ,col = c("aquamarine1","tan1","aquamarine4","chartreuse","deepskyblue","magenta"),xlab="transmission", ylab="sell type",main="Spine-plot for transmission  and sell type")
+```
+
+**RQ6) Does the engine affect max power in transmission type?**\
+
+
+
+```{r}
+ggplot(data=data, aes(x=engine, y=maxPower)) +
+  geom_point(aes(color = transmission), alpha = 0.7) +
+  labs(x = "Engine", y = "Max Power") +
+  facet_wrap(~ transmission, scales = "free") +
+  scale_color_manual(values = c("pink","purple"))+
+  theme_classic()
+```
+
+
+```{r}
+sum(is.na(data))
+```
+
+```{r}
+md.pairs(data)$mm
+```
+
+
+
+```{r}
+colSums(is.na(data))/nrow(data)
+
+```
+
+```{r}
+mice_plot = aggr(data, col=c('darkred','orange'),
+                    numbers=TRUE, sortVars=TRUE, prop=FALSE,
+                    labels=names(data), cex.axis=.7,
+                    gap=3, ylab=c("Missing data","Pattern"))
+```
+
+
+```{r}
+dataImp = mice(data,m=5, method = "pmm",seed=1)
+```
+
+```{r}
+dataComp=complete(dataImp)
+```
+
+
+```{r}
+colSums(is.na(dataComp))
+
+```
+
+```{r}
+summary(dataComp)
+```
+
+
+```{r}
+str(dataComp)
+```
+
+
+
+
+```{r}
+par(mfrow=c(round(length(numeric_data)/2),2))
+for(i in 1:min(ncol(data))){
+  if(is.numeric(data[,i])){
+    d1=density(na.omit(data[,i])) 
+    plot(d1, main=paste("Density of",colnames(data)[i]),xlab="Values",col="blue")
+    d2=density(dataComp[,i])
+    plot(d2, main=paste("Density of imputed",colnames(dataComp)[i]), xlab="Values",col="red")
+    }
+}
+```
+
+```{r}
+trf=boxcox(lm(dataComp$sellPrice~1))
+
+```
+
+
+```{r}
+lambda = trf$x[which.max(trf$y)] #Determine the exact lambda
+dataComp["sellPrice"] = (dataComp$sellPrice ^ lambda - 1) / lambda
+```
+
+
+
+```{r}
+trf=boxcox(lm(dataComp$kmDriven~1))
+
+```
+
+```{r}
+lambda = trf$x[which.max(trf$y)] #Determine the exact lambda
+dataComp["kmDriven"] = (dataComp$kmDriven ^ lambda - 1) / lambda
+```
+
+```{r}
+trf=boxcox(lm(dataComp$mileage~1))
+
+```
+
+```{r}
+lambda = trf$x[which.max(trf$y)] #Determine the exact lambda
+dataComp["mileage"] = (dataComp$mileage ^ lambda - 1) / lambda
+```
+
+
+
+```{r}
+trf=boxcox(lm(dataComp$engine~1))
+
+```
+
+```{r}
+lambda = trf$x[which.max(trf$y)] #Determine the exact lambda
+dataComp["engine"] = (dataComp$engine ^ lambda - 1) / lambda
+```
+
+
+```{r}
+trf=boxcox(lm(dataComp$maxPower~1))
+
+```
+
+```{r}
+lambda = trf$x[which.max(trf$y)] #Determine the exact lambda
+dataComp["maxPower"] = (dataComp$maxPower ^ lambda - 1) / lambda
+```
+
+
+
+
+```{r}
+numeric_data <- dataComp %>% select_if(is.numeric)
+```
+
+```{r}
+sapply(numeric_data, sd)
+
+```
+
+
+
+```{r}
+dim(numeric_data)
+```
+
+```{r}
+pca = prcomp(numeric_data, scale = TRUE)
+summary(pca)
+```
+```{r}
+pca$sdev
+```
+
+
+```{r}
+pca$rotation
+```
+
+
+```{r}
+biplot(pca, scale = 0,cex=c(0.3,0.7))
+```
+
+
+
+
+```{r}
+fviz_eig(pca,ncp = 14)
+```
+
+Let’s select 2 components:
+
+```{r}
+selected_pca=pca$x[,1:2]
+head(selected_pca)
+```
+
+```{r}
+dim(selected_pca)
+```
+```{r}
+cor_check = cor(selected_pca, method="pearson")
+cor_check
+```
+
+
+```{r}
+dataComp[colnames(selected_pca)]=selected_pca
+```
+
+
+```{r}
+dataComp=dummy_cols(dataComp, select_columns = c("fuel","sellType","transmission","owner"), remove_selected_columns = FALSE)
+
+```
+
+
+**CDA:**\
+
+
+
+**RQ1) Is the distributions of the numeric variables?**
+\
+
+**RQ2) Is the  mileage distrubited normally?**
+
+Since length of the data is greater than 5000, we cannot aplt shapiro wilk test; hence, we will apply Kolmogorov-Smirnov test.\
+
+Null Hypothesis (H0): \
+Sample data comes from the specified distribution\
+Alternative Hypothesis (H1):\
+Sample data does not come from the specified distribution\
+
+
+```{r}
+ksTestResult <- ks.test(dataComp$mileage, "pnorm", mean(dataComp$mileage), sd(dataComp$mileage))
+
+print(ksTestResult)
+
+```
+Since p value is less than 0.05, reject null hypothesis.\
+
+
+
+**RQ3) Does the transmission type affect the sell Price in different sell type ?**\
+
+
+```{r}
+ksTestResult <- ks.test(dataComp$sellPrice, "pnorm", mean(dataComp$sellPrice), sd(dataComp$sellPrice))
+
+print(ksTestResult)
+```
+Since normality assumption is not provided, I used Scheirer-Ray-Hare Test which is the non parametric verison of the two way anova.
+```{r}
+scheirer_test <- scheirerRayHare(sellPrice ~ transmission + sellType + transmission:sellType, data = dataComp)
+print(scheirer_test)
+
+```
+Hypothesis 1 (Sell Price DO NOT differ depending on transmission type): 0 < .05
+
+Hypothesis 2 (Sell price levels DO NOT differ depending on sell type): 0 < .05
+
+Hypothesis 3 (The combination of transmission type and sell type is NOT impacting the sell price): 4.4723e-08 < .05
+
+Hypothesis 1: Reject!
+
+Hypothesis 2: Reject!
+
+Hypothesis 3: Reject!
+
+
+**RQ4) Is there a statistically significant correlation among numeric  variables?** \
+
+
+```{r}
+for(i in 1:(length(colnames(numeric_data))-1)){
+  j=i+1
+  for(k in j:length(colnames(numeric_data))){
+    cat("Correlation Trest for",colnames(numeric_data)[i],"and",colnames(numeric_data)[k],":")
+    cor_test_result <- cor.test(numeric_data[,i], numeric_data[,k])
+    print(cor_test_result)
+  }
+}
+
+
+```
+
+
+
+
+**RQ5) How is transmission type distributed  according to fuel type?**\
+
+
+```{r}
+contingencyTable <- table(dataComp$transmission, dataComp$sellType)
+chiSquaredTestResult <- chisq.test(contingencyTable)
+print(chiSquaredTestResult)
+
+```
+
+
+
+**RQ6) Does the engine affect max power in different fuel type?**\
+
+```{r}
+dataAutomatic=dataComp[which(dataComp$transmission=="Automatic"),]
+dataManual=dataComp[which(dataComp$transmission=="Manual"),]
+
+```
+
+
+```{r}
+
+ksTestResult <- ks.test(dataAutomatic$maxPower, "pnorm", mean(dataAutomatic$maxPower), sd(dataAutomatic$maxPower))
+
+print(ksTestResult)
+
+ksTestResult <- ks.test(dataAutomatic$engine, "pnorm", mean(dataAutomatic$engine), sd(dataAutomatic$engine))
+
+print(ksTestResult)
+```
+
+```{r}
+ksTestResult <- ks.test(dataManual$maxPower, "pnorm", mean(dataManual$maxPower), sd(dataManual$maxPower))
+
+print(ksTestResult)
+
+ksTestResult <- ks.test(dataManual$engine, "pnorm", mean(dataManual$engine), sd(dataManual$engine))
+
+print(ksTestResult)
+```
+
+
+
+
+
+
+
+
+Since both variables are not normally distributed, I will use Spearman correlation test which is alternative of pearson corr. test for nonnormal variables
+
+
+
+
+
+```{r}
+# Spearman Correlation
+# Calculate Spearman Correlation for each group
+correlation_by_group <- dataComp %>%
+  group_by(transmission) %>%
+  summarise(correlation = cor(engine,maxPower, method = "spearman"),p_value = cor.test(engine, maxPower, method = "spearman")$p.value)
+print(correlation_by_group)
+
+```
+Since p values are smaller than 0.05 so there is no corr btw variables according to fuel type.
+
+
+
+
+Model 
+
+```{r}
+modelData= dataComp[, -which(names(dataComp) == colnames(data)[0:12])]
+modelData= modelData[, -which(names(modelData) == colnames(modelData)[11])]
+
+```
+
+
+```{r}
+set.seed(1)
+ind = createDataPartition(modelData$transmission_Automatic, p = 0.8, list = FALSE)
+train  = modelData[ind, ] 
+test = modelData[-ind, ]
+```
+
+```{r}
+d_original=dim(modelData)
+d_train=dim(train)
+d_test=dim(test)
+dimens=cbind(d_original,d_train,d_test)
+rownames(dimens)=c("number of rows","number of columns")
+dimens
+```
+
+
+
+```{r}
+prop.table(table(train$transmission_Automatic))
+
+```
+
+```{r}
+table(train$transmission_Automatic)
+
+```
+
+```{r}
+prop.table(table(test$transmission_Automatic))
+
+```
+
+```{r}
+table(test$transmission_Automatic)
+
+```
+```{r}
+ggplot(modelData) +
+  geom_point(aes(PC1, factor(transmission_Automatic)), color = "blue") +
+  labs(x = 'PCA1', y = 'Automatic Transmission')+
+  theme_classic()
+```
+
+```{r}
+ggplot(modelData) +
+  geom_point(aes(PC2, factor(transmission_Automatic)), color = "blue") +
+  labs(x = 'PCA2', y = 'Automatic Transmission')+
+  theme_classic()
+```
+
+
+```{r}
+ggplot(modelData, aes(x = factor(transmission_Automatic), y = PC1, fill = factor(transmission_Automatic))) + 
+  geom_boxplot() + 
+  xlab("transmission_Automatic (Y/N)") + 
+  ylab("PC1") + 
+  ggtitle("transmission_Automatic and PC1")+
+  theme_classic()
+```
+
+```{r}
+ggplot(modelData, aes(x = factor(transmission_Automatic), y = PC2, fill = factor(transmission_Automatic))) + 
+  geom_boxplot() + 
+  xlab("transmission_Automatic (Y/N)") + 
+  ylab("PC2") + 
+  ggtitle("transmission_Automatic and PC2")+
+  theme_classic()
+```
+
+
+```{r}
+logModel = glm(transmission_Automatic~.,
+                 family = binomial,
+                 data = train)
+
+summary(logModel)
+```
+
+Since p values of fuel_CNG, fuel_LPG, sellType_Dealer, `owner_First Owner` , `owner_Fourth & Above Owner`, `owner_Test Drive Car`, `owner_Second Owner`  are greater than 0.05 and  p values of fuel_Petrol,`sellType_Trustmark Dealer`, `sellType_Trustmark Dealer`,`owner_Third Owner`  are NA, these columns do not affect the model hence we need to remove them. 
+
+
+```{r}
+logmodelTrain= train[, -which(names(train) %in% c("fuel_CNG", "fuel_LPG", "sellType_Dealer", "owner_First Owner" , "owner_Fourth & Above Owner", "owner_Test Drive Car", "owner_Second Owner","fuel_Petrol","sellType_Trustmark Dealer", "sellType_Trustmark Dealer","owner_Third Owner") )]
+```
+
+
+```{r}
+logModel = glm(transmission_Automatic~.,
+                 family = binomial,
+                 data = logmodelTrain)
+
+summary(logModel)
+```
+
+Since p values of all variables  are smaller than 0.05, these columns  affect the model. 
+
+```{r}
+prop= round(length(subset(train,transmission_Automatic == 1)$transmission_Automatic)/length(train$transmission_Automatic),2)
+prop
+```
+
+
+
+```{r}
+glm_pred = ifelse(predict(logModel, test, type = "response") > prop, 1, 0)
+
+```
+
+```{r}
+glm_train = ifelse(predict(logModel, train, type = "response") > prop, 1, 0)
+```
+
+
+
+```{r}
+calc_class_err = function(actual, predicted) {
+  mean(actual != predicted)
+}
+
+calc_class_err(actual = test$transmission_Automatic, predicted = glm_pred)
+```
+
+
+```{r}
+testTab= table(predicted = glm_pred,actual = test$transmission_Automatic)
+testTab
+```
+```{r}
+testTab3= table(predicted = glm_train,actual = train$transmission_Automatic)
+testTab3
+
+```
+
+
+```{r}
+testTab= table(predicted = glm_pred,actual = test$transmission_Automatic)
+accuracy=(testTab[1, 1] + testTab[2, 2]) / sum(testTab)
+glm_pred=as.factor(glm_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), glm_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),glm_pred)
+df1=data.frame(accuracy,sensitivity,specificity)
+df1
+```
+
+```{r}
+
+accuracy=(testTab3[1, 1] + testTab3[2, 2]) / sum(testTab3)
+glm_train=as.factor(glm_train)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), glm_train)
+specificity=specificity(as.factor(train$transmission_Automatic),glm_train)
+df3=data.frame(accuracy,sensitivity,specificity)
+df3
+```
+
+```{r}
+test_prob=predict(logModel, type = "response",newdata = test)
+test_roc = roc(test$transmission_Automatic ~ test_prob, plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+
+
+
+tuned_parameter=tune.svm(train[,-10],as.factor(train[,10]),type="C-classification",kernel="linear",gamma = 10^(-5:-1), cost = 10^(-3:1),epsilon = c(0.01,0.05,0.1,0.5,0),scale=FALSE)
+tuned_parameter$best.parameters
+
+
+
+```{r}
+gamma=0.00001
+cost=1
+epsilon=0.01
+```
+```{r}
+svm_tuned<-svm(transmission_Automatic~.,data=train,kernel="linear",cost=cost,gamma=gamma,epsilon=epsilon,type="C-classification")
+svm_tuned
+```
+```{r}
+
+summary(svm_tuned)
+```
+
+
+
+
+```{r}
+svm_pred = predict(svm_tuned, test, type = "response")
+
+```
+
+```{r}
+svm_train = predict(svm_tuned, train, type = "response")
+```
+
+```{r}
+calc_class_err = function(actual, predicted) {
+  mean(actual != predicted)
+}
+
+calc_class_err(actual = as.factor(test$transmission_Automatic), predicted = svm_pred)
+```
+```{r}
+testTab2= table(predicted = svm_pred,actual = as.factor(test$transmission_Automatic))
+testTab2
+```
+
+```{r}
+
+accuracy=(testTab2[1, 1] + testTab2[2, 2]) / sum(testTab2)
+svm_pred=as.factor(svm_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), svm_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),svm_pred)
+df2=data.frame(accuracy,sensitivity,specificity)
+df2
+```
+
+
+```{r}
+testTab4= table(predicted = svm_train,actual = as.factor(train$transmission_Automatic))
+testTab4
+```
+
+```{r}
+
+accuracy=(testTab4[1, 1] + testTab4[2, 2]) / sum(testTab4)
+svm_train=as.factor(svm_train)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), svm_train)
+specificity=specificity(as.factor(train$transmission_Automatic),svm_train)
+df4=data.frame(accuracy,sensitivity,specificity)
+df4
+```
+```{r}
+test_prob=predict(svm_tuned, type = "response",newdata = test)
+test_roc = roc(test$transmission_Automatic ~ as.numeric(test_prob), plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+
+
+
+```{r}
+NBclassfier=naiveBayes( transmission_Automatic ~ . , data=train)
+summary(NBclassfier)
+
+```
+
+
+```{r}
+NB_pred = predict(NBclassfier, test, type = "class")
+
+```
+
+```{r}
+NB_train = predict(NBclassfier, train, type = "class")
+```
+
+```{r}
+calc_class_err = function(actual, predicted) {
+  mean(actual != predicted)
+}
+
+calc_class_err(actual = as.factor(test$transmission_Automatic), predicted = NB_pred)
+```
+```{r}
+testTab2= table(predicted = NB_pred,actual = as.factor(test$transmission_Automatic))
+testTab2
+```
+
+```{r}
+
+accuracy=(testTab2[1, 1] + testTab2[2, 2]) / sum(testTab2)
+NB_pred=as.factor(NB_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), NB_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),NB_pred)
+df5=data.frame(accuracy,sensitivity,specificity)
+df5
+```
+
+```{r}
+testTab4= table(predicted = NB_train,actual = as.factor(train$transmission_Automatic))
+testTab4
+```
+```{r}
+
+accuracy=(testTab4[1, 1] + testTab4[2, 2]) / sum(testTab4)
+svm_train=as.factor(NB_train)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), NB_train)
+specificity=specificity(as.factor(train$transmission_Automatic),NB_train)
+df6=data.frame(accuracy,sensitivity,specificity)
+df6
+```
+```{r}
+test_prob=predict(NBclassfier, type = "class",newdata = test)
+test_roc = roc(test$transmission_Automatic ~ as.numeric(test_prob), plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+```{r}
+fitDT <- rpart(transmission_Automatic~., data = train, method = 'class')
+
+```
+
+```{r}
+rpart.plot(fitDT)
+
+```
+
+
+
+
+
+```{r}
+train_pred <-predict(fitDT,train[,-10],type = 'class')
+calc_class_err(train_pred,train[,10])
+```
+
+
+```{r}
+test_pred <-predict(fitDT,test[,-10],type = 'class')
+calc_class_err(test_pred,test[,10])
+```
+```{r}
+testTab2= table(predicted = test_pred,actual = as.factor(test$transmission_Automatic))
+testTab2
+```
+
+
+```{r}
+
+accuracy=(testTab2[1, 1] + testTab2[2, 2]) / sum(testTab2)
+test_pred=as.factor(test_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), test_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),test_pred)
+df7=data.frame(accuracy,sensitivity,specificity)
+df7
+```
+```{r}
+testTab4= table(predicted = train_pred,actual = as.factor(train$transmission_Automatic))
+testTab4
+```
+
+```{r}
+
+accuracy=(testTab4[1, 1] + testTab4[2, 2]) / sum(testTab4)
+train_pred=as.factor(train_pred)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), train_pred)
+specificity=specificity(as.factor(train$transmission_Automatic),train_pred)
+df8=data.frame(accuracy,sensitivity,specificity)
+df8
+```
+```{r}
+test_prob=predict(fitDT, type = "class",newdata = test)
+test_roc = roc(test$transmission_Automatic ~ as.numeric(test_prob), plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+```{r}
+xgboost_model <- xgboost(data = as.matrix(train[, -10]), 
+                         label = train[,10],
+                         max_depth = 3, 
+                         objective = "binary:logistic", 
+                         nrounds = 10, 
+                         verbose = FALSE)
+summary(xgboost_model)
+```
+
+
+```{r}
+train_pred <-ifelse(predict(xgboost_model,as.matrix(train[,-10]),type = 'response')>prop,1,0)
+calc_class_err(train_pred,train[,10])
+```
+
+
+```{r}
+test_pred <-ifelse(predict(xgboost_model,as.matrix(test[,-10]),type = 'response')>prop,1,0)
+calc_class_err(test_pred,test[,10])
+```
+
+```{r}
+testTab2= table(predicted = test_pred,actual = as.factor(test$transmission_Automatic))
+testTab2
+```
+
+
+```{r}
+accuracy=(testTab2[1, 1] + testTab2[2, 2]) / sum(testTab2)
+test_pred=as.factor(test_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), test_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),test_pred)
+df9=data.frame(accuracy,sensitivity,specificity)
+df9
+```
+
+
+```{r}
+testTab4= table(predicted = train_pred,actual = as.factor(train$transmission_Automatic))
+testTab4
+```
+
+
+```{r}
+accuracy=(testTab4[1, 1] + testTab4[2, 2]) / sum(testTab4)
+train_pred=as.factor(train_pred)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), train_pred)
+specificity=specificity(as.factor(train$transmission_Automatic),train_pred)
+df10=data.frame(accuracy,sensitivity,specificity)
+df10
+```
+```{r}
+test_prob=ifelse(predict(xgboost_model, type = "class",newdata = as.matrix(test$transmission_Automatic))>prop,1,0)
+test_roc = roc(test$transmission_Automatic ~ as.numeric(test_prob), plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+
+```{r}
+colnames(train)=make.names(colnames(train))
+colnames(test)=make.names(colnames(test))
+```
+
+
+
+
+```{r}
+nn_one=neuralnet(transmission_Automatic~.,data=train,linear.output = FALSE,act.fct = "logistic")
+summary(nn_one)
+```
+
+```{r}
+train_pred <-ifelse(predict(nn_one,train,type = 'response')>prop,1,0)
+calc_class_err(train_pred,train[,10])
+```
+
+
+```{r}
+test_pred <-ifelse(predict(nn_one,test,type = 'response')>prop,1,0)
+calc_class_err(test_pred,test[,10])
+```
+
+
+```{r}
+testTab2= table(predicted = test_pred,actual = as.factor(test$transmission_Automatic))
+testTab2
+```
+
+
+```{r}
+
+accuracy=(testTab2[1, 1] + testTab2[2, 2]) / sum(testTab2)
+test_pred=as.factor(test_pred)
+sensitivity=sensitivity(as.factor(test$transmission_Automatic), test_pred)
+specificity=specificity(as.factor(test$transmission_Automatic),test_pred)
+df11=data.frame(accuracy,sensitivity,specificity)
+df11
+```
+
+
+```{r}
+testTab4= table(predicted = train_pred,actual = as.factor(train$transmission_Automatic))
+testTab4
+```
+
+```{r}
+
+accuracy=(testTab4[1, 1] + testTab4[2, 2]) / sum(testTab4)
+train_pred=as.factor(train_pred)
+sensitivity=sensitivity(as.factor(train$transmission_Automatic), train_pred)
+specificity=specificity(as.factor(train$transmission_Automatic),train_pred)
+df12=data.frame(accuracy,sensitivity,specificity)
+df12
+```
+```{r}
+test_prob=ifelse(predict(nn_one, type = "response",newdata = test)>prop,1,0)
+test_roc = roc(test$transmission_Automatic ~ as.numeric(test_prob), plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+```{r}
+merged_df <- rbind(df1, df2)
+merged_df = rbind(merged_df,df3)
+merged_df=rbind(merged_df,df4)
+merged_df = rbind(merged_df,df5)
+merged_df=rbind(merged_df,df6)
+merged_df = rbind(merged_df,df7)
+merged_df=rbind(merged_df,df8)
+merged_df = rbind(merged_df,df9)
+merged_df=rbind(merged_df,df10)
+merged_df = rbind(merged_df,df11)
+merged_df=rbind(merged_df,df12)
+rownames(merged_df)=c("LogModel Test","SVM Test","LogModel Train","SVM Train","NBClassifier Test","NBClassifier Train","DecisionTree Test","DecisionTree Train","XGBoost Test","XGBoost Train","NN_One Test","NN_One Train")
+merged_df
+
+```
